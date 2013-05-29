@@ -46,20 +46,14 @@ func (s *Scan) waitResults() {
 	for _, c := range s.chans {
 		result := <-c
 		s.results = append(s.results, result)
-		fmt.Println("result:", result)
+		if result.Open {
+			fmt.Printf("ip: %s port: %d open\n", result.Addr.Ip, result.Addr.Port)
+		} else {
+			fmt.Printf("ip: %s port: %d not open\n", result.Addr.Ip, result.Addr.Port)
+		}
 	}
 }
 
 func (s *Scan) GetResults() []Result {
 	return s.results
-}
-
-func (s *Scan) GetAddr() {
-	for _, ip := range s.ipList {
-		fmt.Println(ip)
-	}
-
-	for port := range s.portList {
-		fmt.Println(port)
-	}
 }
