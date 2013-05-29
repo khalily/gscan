@@ -12,26 +12,27 @@ type Addrs struct {
 
 type Scan struct {
 	Addrs
-	chans   []chan Result
+	ch      chan Result
+	ok      chan bool
 	results []Result
+	sumAddr int
 }
 
 func NewScan(ipList []Ip, portList []Port) (scan *Scan) {
 	sumAddr := len(ipList) * len(portList)
-	chans := make([]chan Result, sumAddr)
-	return &Scan{Addrs: Addrs{ipList, portList}, chans: chans}
+	ch := make(chan Result, sumAddr)
+	ok := make(chan bool, sumAddr)
+	return &Scan{Addrs: Addrs{ipList, portList}, ch: ch, ok: ok, sumAddr: sumAddr}
 }
 
 func (s *Scan) Scan(way string) {
 	switch way {
 	case "connect":
-		for i, ip := range s.ipList {
-			for j, port := range s.portList {
+		for _, ip := range s.ipList {
+			for _, port := range s.portList {
 				addr := Addr{ip, port}
-				c := make(chan Result, 0)
-				s.chans[i+j] = c
 
-				go connect(addr, c)
+				go connect(addr, s.ch, s.ok)
 			}
 		}
 	case "syn":
@@ -43,15 +44,39 @@ func (s *Scan) Scan(way string) {
 }
 
 func (s *Scan) waitResults() {
-	for _, c := range s.chans {
-		result := <-c
-		s.results = append(s.results, result)
-		if result.Open {
-			fmt.Printf("ip: %s port: %d open\n", result.Addr.Ip, result.Addr.Port)
-		} else {
-			fmt.Printf("ip: %s port: %d not open\n", result.Addr.Ip, result.Addr.Port)
+	var result Result
+	for {
+		select {
+		case result = <-s.ch:
+			s.results = append(s.results, result)
+			if result.Open {
+				fmt.Printf("ip: %s port: %d open\n", result.Addr.Ip, result.Addr.Port)
+			} else {
+				// fmt.Printf("ip: %s port: %d not open\n", result.Addr.Ip, result.Addr.Port)
+			}
+			// for result = range s.ch {
+			// 	s.results = append(s.results, result)
+			// 	if result.Open {
+			// 		fmt.Printf("ip: %s port: %d open\n", result.Addr.Ip, result.Addr.Port)
+			// 	} else {
+			// 		fmt.Printf("ip: %s port: %d not open\n", result.Addr.Ip, result.Addr.Port)
+			// 	}
+			// }
+		case <-s.ok:
+			s.sumAddr--
+			// fmt.Println("sumAddr:", s.sumAddr)
+			// for _ = range s.ok {
+			// 	s.sumAddr--
+
+			// 	fmt.Println("sumAddr:", s.sumAddr)
+			// }
+			if s.sumAddr == 0 {
+				fmt.Println("over")
+				goto LOOP
+			}
 		}
 	}
+LOOP:
 }
 
 func (s *Scan) GetResults() []Result {
